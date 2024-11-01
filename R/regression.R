@@ -71,12 +71,6 @@ regress.slca <- function(
    mf <- stats::model.frame(formula, data)
 
    # Functions
-   dn <- function(X, b, y, k)
-      -sum(stats::dnorm(X, b[y], b[k], log = TRUE))
-
-   d <- function(X, b, y, k)
-      -sum(stats::dnorm(X, b[y], b[k], log = TRUE))
-
    cprobs <- function(X, b, ref) {
       beta <- matrix(nrow = nrow(b), ncol = ncol(b) + 1)
       beta[, ref] = 0
@@ -88,7 +82,7 @@ regress.slca <- function(
    }
 
    y <- stats::model.response(mf)
-   X <- stats::model.matrix(formula, mf)
+   X <- stats::model.matrix(formula, mf, ...)
    nr <- nlevels(y) - 1
    nc <- ncol(X)
    init <- numeric(nc * nr)
@@ -100,8 +94,9 @@ regress.slca <- function(
          prob <- cprobs(X, b, ref)
          - sum(prob[cbind(1:nrow(prob), y)])
       }
-      fit1 <- try(stats::nlm(naive_ll, init, X = X, y = y,
-                      ref = nlevels(y), hessian = TRUE), TRUE)
+      fit1 <- try(suppressWarnings(stats::nlm(
+         naive_ll, init, X = X, y = y, ref = nlevels(y), hessian = TRUE
+         )), TRUE)
       if (!inherits(fit1, "try-error")) {
          ll <- fit1$minimum
          par <- list(fit1$estimate)
@@ -112,8 +107,9 @@ regress.slca <- function(
          hess <- list()
       }
       fit2 <- lapply(c("Nelder-Mead", "BFGS", "CG", "L-BFGS-B", "SANN"), function(x)
-         try(stats::optim(init, naive_ll, X = X, y = y, method = x,
-               ref = nlevels(y), hessian = TRUE), TRUE))
+         try(suppressWarnings(stats::optim(
+            init, naive_ll, X = X, y = y, method = x, ref = nlevels(y), hessian = TRUE
+            )), TRUE))
       fit2 <- fit2[sapply(fit2, class) != "try-error"]
       ll <- c(ll, sapply(fit2, "[[", "value"))
       par <- c(par, lapply(fit2, "[[", "par"))
@@ -123,8 +119,8 @@ regress.slca <- function(
       p <- object$posterior$marginal[[latent]][rownames(mf),]
       w <- switch(
          imputation,
-         modal = apply(p, 1, function(x) x == max(x)),
-         prob  = p
+         modal = apply(p, 1, function(x) as.numeric(x == max(x))),
+         prob  = t(p)
       )
       d <- (w %*% p) / colSums(p)
 
@@ -137,8 +133,9 @@ regress.slca <- function(
             prob <- cprobs(X, b, ref)
             - sum(w_ * prob)
          }
-         fit1 <- try(stats::nlm(bch_ll, init, X = X, w_ = w_,
-                         ref = nlevels(y), hessian = TRUE, iterlim = 2))
+         fit1 <- try(suppressWarnings(stats::nlm(
+            bch_ll, init, X = X, w_ = w_, ref = nlevels(y), hessian = TRUE, iterlim = 2
+            )), silent =  TRUE)
          if (!inherits(fit1, "try-error")) {
             ll <- fit1$minimum
             par <- list(fit1$estimate)
@@ -149,8 +146,9 @@ regress.slca <- function(
             hess <- list()
          }
          fit2 <- lapply(c("Nelder-Mead", "BFGS", "CG", "L-BFGS-B", "SANN"), function(x)
-            try(stats::optim(init, bch_ll, X = X, w_ = w_, method = x,
-                  ref = nlevels(y), hessian = TRUE), TRUE))
+            try(suppressWarnings(stats::optim(
+               init, bch_ll, X = X, w_ = w_, method = x, ref = nlevels(y), hessian = TRUE
+               )),silent = TRUE))
          fit2 <- fit2[sapply(fit2, class) != "try-error"]
          ll <- c(ll, sapply(fit2, "[[", "value"))
          par <- c(par, lapply(fit2, "[[", "par"))
@@ -165,8 +163,10 @@ regress.slca <- function(
             ll <- colSums(exp(prob + w_))
             -sum(log(ll))
          }
-         fit1 <- try(stats::nlm(ml_ll, init, X = X, w_ = w_,
-                     ref = nlevels(y), hessian = TRUE), TRUE)
+
+         fit1 <- try(suppressWarnings(stats::nlm(
+            ml_ll, init, X = X, w_ = w_, ref = nlevels(y), hessian = TRUE
+            )), silent = TRUE)
          if (!inherits(fit1, "try-error")) {
             ll <- fit1$minimum
             par <- list(fit1$estimate)
@@ -177,8 +177,9 @@ regress.slca <- function(
             hess <- list()
          }
          fit2 <- lapply(c("Nelder-Mead", "BFGS", "CG", "L-BFGS-B", "SANN"), function(x)
-            try(stats::optim(init, ml_ll, X = X, w_ = w_, method = x,
-                  ref = nlevels(y), hessian = TRUE), TRUE))
+            try(suppressWarnings(stats::optim(
+               init, ml_ll, X = X, w_ = w_, method = x, ref = nlevels(y), hessian = TRUE
+               )), TRUE))
          fit2 <- fit2[sapply(fit2, class) != "try-error"]
          ll <- c(ll, sapply(fit2, "[[", "value"))
          par <- c(par, lapply(fit2, "[[", "par"))
@@ -287,4 +288,15 @@ confint.reg.slca <- function(
       print.default(ci[[i]])
    }
    invisible(ci[, parm])
+}
+
+logit2ll <- function(x) {
+   cf <- x$coefficient
+   bb <- -colSums(cf) / (nrow(cf) + 1)
+   ll <- rbind(sweep(cf, 2, -bb), bb)
+   dimnames(ll) <- list(
+      class = seq_len(nrow(ll)),
+      colnames(cf)
+   )
+   ll
 }

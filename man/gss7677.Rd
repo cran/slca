@@ -10,7 +10,7 @@ A data frame with 2942 rows and 14 variables:
 \item{\code{COHORT}}{Respondent's age \cr levels: (1)\code{YOUNG}, (2)\code{YOUNG-MIDDLE}, (4)\code{MIDDLE}, (5)\code{OLD}}
 \item{\code{SEX}}{Respondent's sex \cr levels: (1)\code{MALE}, (2)\code{FEMALE}}
 \item{\code{RACE}}{Respondent's race \cr levels: (1)\code{WHITE} (2)\code{BLACK}, (3)\code{OTHER}}
-\item{\code{DEGREE}}{Respondent's degree \cr levels: (1)\code{LT HS}, (2)\code{HIGH-SCH}, (3)\code{COLLEGE}, (4) \code{BACHELOR}, (5)\code{GRADUATE}}
+\item{\code{DEGREE}}{Respondent's degree \cr levels: (1)\code{LT HS}, (2)\code{HIGH-SCH}, (3)\code{HIGHER}}
 \item{\code{REALRINC}}{Income of respondents}
 \item{\code{PAPRES}}{Father's prestige (occupation) \cr levels: (1)\code{LOW}, (2)\code{MIDIUM}, (2)\code{HIGH}}
 \item{\code{PADEG}}{Father's degree \cr levels: (1)\code{LT HS}, (2)\code{HIGH-SCH}, (3)\code{COLLEGE}, (4) \code{BACHELOR}, (5)\code{GRADUATE}}
@@ -35,12 +35,12 @@ The variables associating social status include father's occupation and educatio
 library(magrittr)
 data <- gss7677[gss7677$RACE == "BLACK",]
 model_stat <- slca(status(3) ~ PAPRES + PADEG + MADEG) \%>\%
-   estimate(data = data)
+   estimate(data = data, control = list(em.tol = 1e-6))
 summary(model_stat)
 param(model_stat)
 
 model_tol <- slca(tol(4) ~ TOLRAC + TOLCOM + TOLHOMO + TOLATH + TOLMIL) \%>\%
-   estimate(data = data)
+   estimate(data = data, control = list(em.tol = 1e-6))
 summary(model_tol)
 param(model_tol)
 
@@ -48,12 +48,12 @@ model_lta <- slca(
    status(3) ~ PAPRES + PADEG + MADEG,
    tol(4) ~ TOLRAC + TOLCOM + TOLHOMO + TOLATH + TOLMIL,
    status ~ tol
-) \%>\% estimate(data = data)
+) \%>\% estimate(data = data, control = list(em.tol = 1e-6))
 summary(model_lta)
 param(model_lta)
 
-regress(model_lta, status ~ SEX, data)
 \donttest{
+regress(model_lta, status ~ SEX, data)
 regress(model_lta, status ~ SEX, data, method = "BCH")
 regress(model_lta, status ~ SEX, data, method = "ML")
 }

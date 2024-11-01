@@ -2,14 +2,15 @@
 % Please edit documentation in R/diagnostic.R
 \name{compare}
 \alias{compare}
-\title{Comparing Two Estimated \code{slca} Models}
+\title{Compare Two Estimated \code{slca} Models}
 \usage{
 compare(
   model1,
   model2,
   test = c("none", "chisq", "boot"),
-  nboot = 100,
+  nboot = 50,
   method = c("hybrid", "em", "nlm"),
+  plot = FALSE,
   maxiter = 1000,
   tol = 1e-08,
   verbose = FALSE
@@ -20,11 +21,13 @@ compare(
 
 \item{model2}{another object of class \code{slca} and \code{estimated}.}
 
-\item{test}{a character string specifying the type of test to be conducted. If "chisq", a chi-squared test is conducted. If "boot", a bootstrap test is conducted.}
+\item{test}{a character string specifying the type of test to be conducted. If \code{"chisq"}, a chi-squared test is conducted. If \code{"boot"}, a bootstrap test is conducted.}
 
 \item{nboot}{an integer specifying the number of bootstrap rounds to be performed.}
 
 \item{method}{estimation method for bootstrapping.}
+
+\item{plot}{a logical value indicating whether to print histogram of G-squared statistics for boostrap samples, only for \code{test = "boot"}.}
 
 \item{maxiter}{an integer specifying maximum number of iterations allowed for the estimation process of each bootstrapping round.}
 
@@ -43,11 +46,11 @@ Provides relative model fit test for two fitted SLCM models with deviance statis
 library(magrittr)
 data <- gss7677[gss7677$COHORT == "YOUNG", ]
 stat2 <- slca(status(2) ~ PAPRES + PADEG + MADEG) \%>\%
-   estimate(data = data)
+   estimate(data = data, control = list(verbose = FALSE))
 stat3 <- slca(status(3) ~ PAPRES + PADEG + MADEG) \%>\%
-   estimate(data = data)
+   estimate(data = data, control = list(verbose = FALSE))
 stat4 <- slca(status(4) ~ PAPRES + PADEG + MADEG) \%>\%
-   estimate(data = data)
+   estimate(data = data, control = list(verbose = FALSE))
 
 gof(stat2, stat3, stat4)
 gof(stat2, stat3, stat4, test = "chisq")
@@ -62,5 +65,5 @@ compare(stat3, stat4, test = "boot")
 }
 }
 \seealso{
-\link[slca]{compare}
+\link[slca]{gof}
 }
