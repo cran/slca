@@ -33,7 +33,7 @@ count_row <- function(mf, nlev, na.rm) {
       uobs <- !duplicated(yobs)
       obs_uniq <- yobs[uobs, ]
       obs_freq <- tabulate(cumsum(uobs))
-      if (prod(nlev) * length(nlev) < 1e10) {
+      if (prod(nlev) * length(nlev) < 1e6) {
          fmat <- as.matrix(expand.grid(lapply(nlev, seq_len)))
          obs_uniq <- unique(rbind(obs_uniq, fmat))
          obs_freq <- c(obs_freq, rep(0, nrow(obs_uniq) - length(obs_freq)))
@@ -93,6 +93,29 @@ proc_data <- function(data, model, na.rm) {
    attr(mf, "loglik") <- res$loglik
    attr(mf, "df") <- prod(nlev) - 1
 
+   mf
+}
+
+
+proc_data2 <- function(data, model, na.rm) {
+   child <- model$measure$indicator
+   f <- paste("~", paste(unlist(child), collapse = "+"))
+   if (na.rm)
+      mf <- stats::model.frame(stats::formula(f), data)
+   else
+      mf <- stats::model.frame(stats::formula(f), data, na.action = NULL)
+
+   mf[] <- lapply(mf, function(x)
+      if (is.factor(x)) x else factor(x, levels = c()))
+   lev <- lapply(mf, levels)
+   nlev <- sapply(mf, nlevels)
+   mf[] <- lapply(mf, as.numeric)
+   nmf <- mf
+   nmf[] <- lapply(mf, as.numeric)
+   nmf[is.na(nmf)] <- 0
+   attr(mf, "y") <- unlist(lapply(child, function(x) t(nmf[x])),
+                           use.names = FALSE)
+   attr(mf, "levels") <- lev
    mf
 }
 

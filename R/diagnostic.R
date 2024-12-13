@@ -1,6 +1,6 @@
-#' @exportS3Method stats::logLik slca
-logLik.slca <- function(object, ...) {
-   res <- if (inherits(object, "estimated"))
+#' @exportS3Method stats::logLik slcafit
+logLik.slcafit <- function(object, ...) {
+   res <- if (inherits(object, "slcafit"))
       structure(sum(object$loglikelihood),
                 df = object$arg$df,
                 nobs = object$arg$nobs
@@ -10,60 +10,56 @@ logLik.slca <- function(object, ...) {
    res
 }
 
-#' @exportS3Method stats::deviance slca
-deviance.slca <- function(object, ...) {
-   if (!inherits(object, "estimated"))
-      stop("slca model is not estimated")
-   sapply(objects, function(x)
-      2 * (attr(x$mf, "loglik") - stats::logLik(x)))
+#' @exportS3Method stats::deviance slcafit
+deviance.slcafit <- function(object, ...) {
+   2 * (attr(object$mf, "loglik") - sum(object$loglikelihood))
 }
 
-#' Goodness of Fit Test for Estimated `slca` Model
+#' Goodness-of-Fit Test for Fitted `slca` Model
 #'
-#' Provides AIC, BIC and deviance statistic (G-squared) for goodness of fit test for the fitted model. Absolute model fit can be tested with deviance statistics, if `test` argument is specified.
-#'
-#' @aliases gof gof.slca
-#'
+#' Computes the AIC, BIC, and deviance statistic (G-squared) for assessing the goodness-of-fit of a fitted `slca` model. If the `test` argument is specified, absolute model fit can be evaluated using deviance statistics.
+##'
 #' @usage
 #' gof(object, ...)
 #'
-#' \method{gof}{slca}(
+#' \method{gof}{slcafit}(
 #'    object, ..., test = c("none", "chisq", "boot"),
 #'    nboot = 100, plot = FALSE,
 #'    maxiter = 100, tol = 1e-6, verbose = FALSE
 #' )
 #'
-#' @param object an object of class `slca` and `estimated`.
-#' @param ... additional objects of class `slca` and `estimated`.
+#' @param object an object of class `slcafit`.
+#' @param ... additional objects of class `slcafit` for comparison.
 #' @param test a character string specifying the type of test to be conducted. If `"chisq"`, a chi-squared test is conducted. If `"boot"`, a bootstrap test is conducted.
 #' @param nboot an integer specifying the number of bootstrap rounds to be performed.
-#' @param plot a logical value indicating whether to print histogram of G-squared statistics for boostrap samples, only for `test = "boot"`.
-#' @param maxiter an integer specifying maximum number of iterations allowed for the estimation process of each bootstrapping round.
-#' @param tol a numeric value setting tolerance for the convergence of each bootstrapping round.
+#' @param plot a logical value indicating whether to print histogram of G-squared statistics for boostrap samples, only for `test = "boot"`. The default is `FALSE`.
+#' @param maxiter an integer specifying the maximum number of iterations allowed for the estimation process during each bootstrap iteration. The default is 100.
+#' @param tol a numeric value specifying the convergence tolerance for each bootstrap iteration. The default is `1e-6`.
 #' @param verbose a logical value indicating whether to print progress updates on the number of bootstrapping rounds completed.
 #'
 #' @returns
 #' A `data.frame` containing the number of parameters (Df), loglikelihood, AIC, BIC, G-squared statistics, and the residual degree of freedom for each object.
-#' Depending on the `test` argument, the p-value for the corresponding statistical test may also be included.
+#' If a statistical test is performed (using `test`), the result includes the corresponding p-value.
 #'
 #' @seealso \link[slca]{compare}
 #'
-#' @example man/examples/diag.R
+#' @example man/examples/diagnostic.R
 #'
 #' @export
 gof <- function(object, ...) UseMethod("gof")
 
-#' @exportS3Method slca::gof slca
-gof.slca <- function(
+#' @rdname gof
+#' @exportS3Method slca::gof slcafit
+gof.slcafit <- function(
       object, ...,  test = c("none", "chisq", "boot"),
       nboot = 100, plot = FALSE,
       maxiter = 100, tol = 1e-6, verbose = FALSE
 ) {
    cl <- match.call(expand.dots = FALSE)
    objects <- list(object, ...)
-   est <- sapply(objects, inherits, "estimated")
    mn <- sapply(c(cl[["object"]], cl[["..."]]), deparse)
-   if (all(!est)) stop("at least 1 model should be estimated")
+   est <- sapply(objects, inherits, "slcafit")
+   if (all(!est)) stop("all models should be estimated")
    objects <- objects[est]
    mn <- mn[est]
    nmodel <- length(mn)
@@ -137,7 +133,8 @@ gof.slca <- function(
          if (plot) {
             graphics::hist(gb, breaks = "FD",
                  main = bquote(.(mn[i]) ~ ": Bootstrap Histogram"),
-                 xlab = bquote("G"^2 ~ "statistic"))
+                 xlab = bquote("G"^2 ~ "statistic"),
+                 xlim = c(min(min(gb), gsq[i]), max(max(gb), gsq[i])))
             graphics::abline(v = gsq[i], col = "red", lwd = 1.5)
          }
       }
@@ -148,27 +145,27 @@ gof.slca <- function(
              class = c("anova", "data.frame"))
 }
 
-#' Compare Two Estimated `slca` Models
+#' Compare Two Fitted `slca` Models
 #'
-#' Provides relative model fit test for two fitted SLCM models with deviance statistic.
+#' Conducts a relative model fit test between two fitted SLCM models using the deviance statistic.
 #'
-#' @param model1 an object of class `slca` and `estimated`.
-#' @param model2 another object of class `slca` and `estimated`.
+#' @param model1 an object of class `slcafit`.
+#' @param model2 another object of class `slcafit` to be compared with `model1`.
 #' @param test a character string specifying the type of test to be conducted. If `"chisq"`, a chi-squared test is conducted. If `"boot"`, a bootstrap test is conducted.
-#' @param nboot an integer specifying the number of bootstrap rounds to be performed.
-#' @param method estimation method for bootstrapping.
-#' @param plot a logical value indicating whether to print histogram of G-squared statistics for boostrap samples, only for `test = "boot"`.
-#' @param maxiter an integer specifying maximum number of iterations allowed for the estimation process of each bootstrapping round.
-#' @param tol a numeric value setting tolerance for the convergence of each bootstrapping round.
-#' @param verbose a logical value indicating whether to print progress updates on the number of bootstrapping rounds completed.
+#' @param nboot an integer specifying the number of bootstrap iterations to perform (used only when `test = "boot"`). The default is 100.
+#' @param method a character string specifying the estimation method for bootstrapping.
+#' @param plot a logical value indicating whether to display a histogram of G-squared statistics for the bootstrap samples (applicable only for `test = "boot"`). The default is `FALSE`.
+#' @param maxiter an integer specifying the maximum number of iterations allowed during each bootstrap estimation round. The default is 100.
+#' @param tol numeric value setting the convergence tolerance for each bootstrap iteration. The default is `1e-6`.
+#' @param verbose a logical value indicating whether to print progress updates on completed bootstrap iterations. The default is `FALSE`.
 #'
 #' @returns
 #' A `data.frame` containing the number of parameters (Df), loglikelihood, AIC, BIC, G-squared statistics, and the residual degree of freedom for each object.
-#' Depending on the `test` argument, the p-value for the corresponding statistical test may also be included.
+#' If a statistical test is conducted (via `test`), the resulting p-value for the comparison is also included.
 #'
 #' @seealso \link[slca]{gof}
 #'
-#' @example man/examples/diag.R
+#' @example man/examples/diagnostic.R
 #'
 #' @export
 compare <- function(
@@ -181,7 +178,7 @@ compare <- function(
    test <- match.arg(test)
    method <- match.arg(method)
    name <- c(cl[["model1"]], cl[["model2"]])
-   if (any(!sapply(models, inherits, "estimated")))
+   if (any(!sapply(models, inherits, "slcafit")))
       stop("both model should be estimated")
    mf1 <- model1$mf
    mf2 <- model2$mf
@@ -273,7 +270,8 @@ compare <- function(
       if (plot) {
          graphics::hist(gb, breaks = "FD",
               main = "Bootstrap Histogram",
-              xlab = bquote("G"^2 ~ "statistic"))
+              xlab = bquote("G"^2 ~ "statistic"),
+              xlim = c(min(min(gb), gsq), max(max(gb), gsq)))
          graphics::abline(v = gsq, col = "red", lwd = 1.5)
       }
    }
