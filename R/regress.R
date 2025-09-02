@@ -7,7 +7,7 @@
 #'
 #' \method{regress}{slcafit}(
 #'    object, formula, data = parent.frame(),
-#'    imputation = c("modal", "prob"),
+#'    imputation = c("modal", "prop"),
 #'    method = c("naive", "BCH", "ML"), ...
 #' )
 #' @param object an object of class `slcafit`.
@@ -16,7 +16,7 @@
 #' @param imputation a character string specifying the imputation method for latent class assignment. Options include:
 #'    \itemize{
 #'       \item `"modal"`: Assigns each individual to the latent class with the highest posterior probability.
-#'       \item `"prob"`: Assigns classes probabilistically based on the posterior probability distribution.
+#'       \item `"prop"`: Assigns classes probabilistically based on the posterior probability distribution.
 #'    }
 #' @param method a character string specifying the method to adjust for bias in the three-step approach. Options include:
 #'   \itemize{
@@ -47,7 +47,7 @@ regress <- function(object, ...) UseMethod("regress")
 #' @exportS3Method slca::regress slcafit
 regress.slcafit <- function(
       object, formula, data = parent.frame(),
-      imputation = c("modal", "prob"),
+      imputation = c("modal", "prop"),
       method = c("naive", "BCH", "ML"), ...
 ) {
    # Import
@@ -62,12 +62,7 @@ regress.slcafit <- function(
 
    # Imputation
    impute <- function(x, imputation) {
-      if (imputation == "modal")
-         imputed <- as.factor(apply(x, 1, which.max))
-      else
-         imputed <- as.factor(apply(x, 1, function(y)
-            sample(seq_len(ncol(x)), 1, prob = y)))
-      return(imputed)
+      as.factor(apply(x, 1, which.max))
    }
 
    if (missing(data)) data <- object$mf
@@ -87,7 +82,12 @@ regress.slcafit <- function(
       denom <- rowSums(exb)
       xb - log(denom)
    }
-
+   p <- object$posterior$marginal[[latent]][rownames(mf),]
+   w <- switch(
+      imputation,
+      modal = apply(p, 1, function(x) as.numeric(x == max(x))),
+      prop  = t(p)
+   )
    y <- stats::model.response(mf)
    X <- stats::model.matrix(formula, mf, ...)
    nr <- nlevels(y) - 1
@@ -96,13 +96,13 @@ regress.slcafit <- function(
 
    if (method == "naive") {
       # naive (biased)
-      naive_ll <- function(par, X, y, ref) {
+      naive_ll <- function(par, X, w, ref) {
          b <- matrix(par, nrow = ncol(X))
          prob <- cprobs(X, b, ref)
-         - sum(prob[cbind(1:nrow(prob), y)])
+         - sum(prob * t(w))
       }
       fit1 <- try(suppressWarnings(stats::nlm(
-         naive_ll, init, X = X, y = y, ref = nlevels(y), hessian = TRUE
+         naive_ll, init, X = X, w = w, ref = nlevels(y), hessian = TRUE
          )), TRUE)
       if (!inherits(fit1, "try-error")) {
          ll <- fit1$minimum
@@ -115,7 +115,7 @@ regress.slcafit <- function(
       }
       fit2 <- lapply(c("Nelder-Mead", "BFGS", "CG", "L-BFGS-B", "SANN"), function(x)
          try(suppressWarnings(stats::optim(
-            init, naive_ll, X = X, y = y, method = x, ref = nlevels(y), hessian = TRUE
+            init, naive_ll, X = X, w = w, method = x, ref = nlevels(y), hessian = TRUE
             )), TRUE))
       fit2 <- fit2[sapply(fit2, class) != "try-error"]
       ll <- c(ll, sapply(fit2, "[[", "value"))
@@ -123,12 +123,6 @@ regress.slcafit <- function(
       hess <- c(hess, lapply(fit2, "[[", "hessian"))
    } else {
       # bias_adjusted
-      p <- object$posterior$marginal[[latent]][rownames(mf),]
-      w <- switch(
-         imputation,
-         modal = apply(p, 1, function(x) as.numeric(x == max(x))),
-         prob  = t(p)
-      )
       d <- (w %*% p) / colSums(p)
 
       if (method == "BCH") {
@@ -162,13 +156,10 @@ regress.slcafit <- function(
          hess <- c(hess, lapply(fit2, "[[", "hessian"))
       } else if (method == "ML") {
          # ML
-         w_ <- log(sapply(y, function(x) d[, x]))
-
          ml_ll <- function(par, X, w_, ref) {
             b <- matrix(par, ncol(X))
             prob <- t(cprobs(X, b, ref))
-            ll <- colSums(exp(prob + w_))
-            -sum(log(ll))
+            - sum(w * log(d %*% exp(prob)))
          }
 
          fit1 <- try(suppressWarnings(stats::nlm(
