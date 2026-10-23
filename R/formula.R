@@ -3,9 +3,17 @@ get_lformula <- function(f) {
    lhs_split <- strsplit(lhs, "[()]|\\[|\\]")[[1]]
 
    attr(f, "label") <- lhs_split[1]
-   if (exists(lhs_split[2])) nc <- get(lhs_split[2])
-   else nc <- lhs_split[2]
-   attr(f, "nclass") <- as.numeric(nc)
+   nc <- NA_real_
+   if (length(lhs_split) > 1 && nzchar(lhs_split[2])) {
+      nc_raw <- lhs_split[2]
+      if (exists(nc_raw, inherits = TRUE)) nc_raw <- get(nc_raw)
+      nc <- suppressWarnings(as.numeric(nc_raw))
+      if (length(nc) != 1 || !is.finite(nc) || nc != floor(nc) || nc < 2)
+         stop("number of classes for `", lhs_split[1],
+              "` must be an integer greater than or equal to 2.",
+              call. = FALSE)
+   }
+   attr(f, "nclass") <- nc
    attr(f, "vars") <- labels(stats::terms(f))
 
    f
@@ -20,6 +28,9 @@ proc_tree <- function(nc, iv) {
       par <- tree$parent[i]
       rank <- 1
       while (par %in% tree$child) {
+         if (rank > nrow(tree))
+            stop("latent variable relationships must not contain cycles.",
+                 call. = FALSE)
          rank <- rank + 1
          par <- tree$parent[tree$child == par]
       }

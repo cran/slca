@@ -26,7 +26,7 @@ slcaControl(
 
 \item{nlm.tol}{a numeric value setting the tolerance for convergence of the \code{nlm} function. The default is \code{1e-10}.}
 
-\item{init.param}{a numeric vector specifying the initial parameter values for estimation.}
+\item{init.param}{a numeric vector specifying the initial parameter values for estimation. Its length must match the number of model parameters.}
 
 \item{nrep}{an integer specifying the number of estimation trials. The default is \code{1}. Details for generating initial parameter set is described below.}
 
@@ -47,6 +47,12 @@ Specifies control parameters for estimating \code{slca} model.
 \strong{Missing data:}
 Missing data are handled in two ways. If all manifest variables for an observation are missing, the case is excluded (listwise deletion).
 For partially missing data, the model assumes Missing At Random (MAR) and uses following algorithm to integrate over the missing values.
+Saturated-model fit statistics use response cells compatible with the
+observed patterns. If the required table is too large to construct,
+or its EM iteration does not converge within the iteration limit,
+these statistics are returned as \code{NA} with a warning; model estimation
+remains available. The fitted model frame records \code{saturated.converged}
+and \code{saturated.iterations} attributes for this calculation.
 In the E-step, posterior probabilities are computed using only the observed items.
 In the M-step, parameter updates use these posterior probabilities, with expected counts for missing responses distributed according to current parameter estimates.
 

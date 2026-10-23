@@ -9,7 +9,7 @@
 \arguments{
 \item{object}{An object of class \code{slcafit}, representing a fitted \code{slca} model.}
 
-\item{newdata}{A \code{data.frame} containing the same variables as those used to estimate the \code{object}.}
+\item{newdata}{A \code{data.frame}, matrix, or vector containing the same manifest variables as those used to estimate the \code{object}. Unknown response levels are not allowed.}
 
 \item{type}{A character string indicating the type of prediction. Use \code{"class"} to obtain the predicted class membership for each observation and latent class variable, or \code{"posterior"} to retrieve posterior probabilities for each class. The default is \code{"class"}.}
 
@@ -19,9 +19,10 @@
 A \code{data.frame} or \code{list} depending on the \code{type}:
 \itemize{
 \item For \code{type = "class"}, a \code{data.frame} is returned where rows represent observations and columns correspond to latent class variables.
-\item For \code{type = "posterior"}, a \code{list} is returned containing \code{data.frame}s with posterior probabilities for each latent class variable.
+\item For \code{type = "posterior"}, a \code{list} is returned containing one matrix for each latent class variable. Rows represent observations and columns represent latent classes.
 }
 }
 \description{
-Provides predicted class memberships or posterior probabilities for new data based on a fitted \code{slca} model.
+Provides predicted class memberships or posterior probabilities based on a fitted \code{slca} model.
+If \code{newdata} is omitted, predictions are computed from the posterior probabilities stored in \code{object}.
 }

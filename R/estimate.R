@@ -22,6 +22,13 @@
 #' @details
 #' The `fix2zero` argument allows you to constrain specific parameters to zero. Each parameter is associated with a unique index, which can be identified using the \link[slca]{param} function with the argument `index = TRUE`. To apply constraints, provide the relevant parameter indices in the `fix2zero` arguments with vector.
 #'
+#' @details
+#' Manifest responses are categorical; continuous-response models are not
+#' supported. Corresponding indicators under equality constraints must have
+#' identical factor levels, including labels and order. For categories absent
+#' from a sample, declare the full levels explicitly, for example
+#' `factor(x, levels = 1:3)`, consistently across constrained indicators.
+#'
 #' @returns
 #' An object of class `slcafit` containing the following components:
 #' \item{model}{a `list` describing of the model structure.}
@@ -32,7 +39,7 @@
 #' \item{logit}{the log-odds of the estimated parameters.}
 #' \item{score}{the score function for the estimated parameters.}
 #' \item{posterior}{a `list` of posterior probablities for each latent class variable.}
-#' \item{convergence}{a logical indicator of whether convergence was achieved.}
+#' \item{convergence}{a named logical vector indicating whether convergence was achieved for the EM and `nlm` steps. Steps not used by the selected method are returned as `NA`.}
 #' \item{loglikelihood}{the loglikelihood value of the estimated model.}
 #' \item{control}{the control settings used during the estimation process.}
 #'
@@ -72,6 +79,9 @@ estimate.slca <- function(
    if (inherits(x, "slcafit")) par <- x$par
    if (!is.null(control$init.param)) {
       init.param <- unlist(control$init.param)
+      if (length(init.param) != length(arg$id))
+         stop("`control$init.param` must have length ", length(arg$id),
+              ".", call. = FALSE)
       if (all(init.param >= 0))
          par <- unlist(tapply(init.param, arg$id, norm1), use.names = FALSE)
       else
@@ -88,7 +98,7 @@ estimate.slca <- function(
                cat(i, "/", control$nrep, " ")
             }
             init.param <- stats::runif(length(arg$id), 1, 1.1)
-            init.param[arg$fix0] <- -Inf
+            init.param[arg$fix0] <- 0
             tpar <- unlist(tapply(init.param, arg$id, norm1),
                            use.names = FALSE)
             em <- em_est(
@@ -164,5 +174,3 @@ estimate.slca <- function(
    class(x) <- c("slcafit", "slca")
    x
 }
-
-

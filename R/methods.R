@@ -338,11 +338,14 @@ vcov.slcafit <- function(
    dn <- paste0("(", seq_len(dm), ")")
    vcov <- matrix(0, dm, dm, dimnames = list(dn, dn))
 
-   if (hessian && all(is.na(object$hessian))) {
-      hess <- object$hess
+   if (hessian && !all(is.na(object$hessian))) {
+      hess <- object$hessian
       nan <- is.na(diag(hess))
       vcov[!nan, !nan] <- MASS::ginv(hess[!nan, !nan])
    } else {
+      if (hessian)
+         warning("Hessian is unavailable; using the score covariance.",
+                 call. = FALSE)
       score <- object$score
       fi <- crossprod(score)
       nan <- apply(score, 2, anyNA)
@@ -358,34 +361,70 @@ vcov.slcafit <- function(
 
 #' Model Predictions for Estimated `slca` Object
 #'
-#' Provides predicted class memberships or posterior probabilities for new data based on a fitted `slca` model.
+#' Provides predicted class memberships or posterior probabilities based on a fitted `slca` model.
+#' If `newdata` is omitted, predictions are computed from the posterior probabilities stored in `object`.
 #'
 #' @param object An object of class `slcafit`, representing a fitted `slca` model.
-#' @param newdata A `data.frame` containing the same variables as those used to estimate the `object`.
+#' @param newdata A `data.frame`, matrix, or vector containing the same manifest variables as those used to estimate the `object`. Unknown response levels are not allowed.
 #' @param type A character string indicating the type of prediction. Use `"class"` to obtain the predicted class membership for each observation and latent class variable, or `"posterior"` to retrieve posterior probabilities for each class. The default is `"class"`.
 #' @param ... Additional arguments passed to other methods.
 #'
 #' @returns A `data.frame` or `list` depending on the `type`:
 #'   \itemize{
 #'     \item For `type = "class"`, a `data.frame` is returned where rows represent observations and columns correspond to latent class variables.
-#'     \item For `type = "posterior"`, a `list` is returned containing `data.frame`s with posterior probabilities for each latent class variable.
+#'     \item For `type = "posterior"`, a `list` is returned containing one matrix for each latent class variable. Rows represent observations and columns represent latent classes.
 #'   }
 #'
 #' @exportS3Method stats::predict slcafit
 predict.slcafit <- function(
    object, newdata, type = c("class", "posterior"), ...
 ) {
-   dims <- dim(object$mf)
    levs <- levels(object$mf)
+   vars <- names(object$mf)
    type <- match.arg(type)
-   if (missing(newdata)) post <- object$posterior
+   if (missing(newdata)) post <- lapply(object$posterior$marginal, t)
    else {
+      nvar <- length(vars)
       if (!is.data.frame(newdata)) {
-         mat <- matrix(newdata, ncol = dims[2])
-         colnames(mat) <- names(object$mf)
+         if (is.null(dim(newdata))) {
+            if (length(newdata) %% nvar != 0)
+               stop("`newdata` length must be a multiple of the number of manifest variables.",
+                    call. = FALSE)
+            mat <- matrix(newdata, ncol = nvar, byrow = TRUE)
+         } else {
+            mat <- as.matrix(newdata)
+            if (ncol(mat) != nvar)
+               stop("`newdata` must have the same number of columns as the manifest variables.",
+                    call. = FALSE)
+         }
+         if (!is.null(colnames(mat)) && all(vars %in% colnames(mat))) {
+            mat <- mat[, vars, drop = FALSE]
+         } else {
+            colnames(mat) <- vars
+         }
          newdata <- data.frame(mat)
+      } else {
+         missing_vars <- setdiff(vars, names(newdata))
+         if (length(missing_vars) > 0)
+            stop("`newdata` is missing manifest variable(s): ",
+                 paste(missing_vars, collapse = ", "), call. = FALSE)
+         newdata <- newdata[vars]
       }
-      newdata[] <- lapply(names(object$mf), function(x) {
+      unknown <- lapply(vars, function(x) {
+         val <- as.character(newdata[[x]])
+         setdiff(unique(val[!is.na(val)]), levs[[x]])
+      })
+      names(unknown) <- vars
+      unknown <- unknown[lengths(unknown) > 0]
+      if (length(unknown) > 0) {
+         msg <- paste(
+            sprintf("%s: %s", names(unknown),
+                    vapply(unknown, paste, character(1), collapse = ", ")),
+            collapse = "; "
+         )
+         stop("`newdata` contains unknown levels: ", msg, call. = FALSE)
+      }
+      newdata[] <- lapply(vars, function(x) {
          newdata[[x]] <- factor(newdata[[x]], levels = levs[[x]])
       })
       mf <- proc_data2(newdata, object$model, FALSE)
@@ -452,7 +491,7 @@ confint.slcafit <- function(
    cn <- format_pc(c(lower, upper), 3)
 
    ci <- val + se %o% stats::qnorm(c(lower, upper))
-   ci <- ci[parm,]
+   ci <- ci[parm, , drop = FALSE]
    colnames(ci) <- cn
    rownames(ci) <- paste0("(", parm, ")")
    ci
@@ -478,6 +517,11 @@ format_pc <- function(perc, digits)
 reorder.slcafit <- function(x, ...) {
    m <- match.call(expand.dots = FALSE)
    orders <- lapply(list(...), rank, ties.method = "first")
+   requested <- names(orders)
+   unknown <- setdiff(requested, row.names(x$model$latent))
+   if (length(unknown) > 0)
+      warning("Ignoring unknown latent variable(s): ",
+              paste(unknown, collapse = ", "), call. = FALSE)
    name <- intersect(names(orders), row.names(x$model$latent))
 
    id <- utils::relist(seq_along(x$par), x$skeleton$par)
@@ -492,20 +536,32 @@ reorder.slcafit <- function(x, ...) {
       for (i in names(parent)) {
          if (nm %in% child[[i]]) {
             name <- union(name, child[[i]])
-            for (j in child[[i]])
+            for (j in child[[i]]) {
+               if (j %in% requested && !identical(orders[[j]], orders[[nm]]))
+                  warning("Conflicting reorder specifications for linked latent variables; using the propagated order.",
+                          call. = FALSE)
                orders[[j]] <- orders[[nm]]
+            }
          }
          if (nm %in% parent[[i]]) {
             name <- union(name, parent[[i]])
-            for (j in parent[[i]])
+            for (j in parent[[i]]) {
+               if (j %in% requested && !identical(orders[[j]], orders[[nm]]))
+                  warning("Conflicting reorder specifications for linked latent variables; using the propagated order.",
+                          call. = FALSE)
                orders[[j]] <- orders[[nm]]
+            }
          }
       }
       for (i in names(rho_name)) {
          if (nm %in% rho_name[[i]]) {
             name <- union(name, rho_name[[i]])
-            for (j in rho_name[[i]])
+            for (j in rho_name[[i]]) {
+               if (j %in% requested && !identical(orders[[j]], orders[[nm]]))
+                  warning("Conflicting reorder specifications for linked latent variables; using the propagated order.",
+                          call. = FALSE)
                orders[[j]] <- orders[[nm]]
+            }
          }
       }
    }
@@ -539,19 +595,37 @@ reorder.slcafit <- function(x, ...) {
    rid <- unlist(id, use.names = FALSE)
    par <- x$par
    par[] <- x$par[rid]
-   logit <- x$logit
-   logit[] <- x$logit[rid]
    arg <- x$arg
    arg$fix0 <- arg$fix0[rid]
    fix2zero <- which(arg$fix0)
-   ref <- arg$ref
-   ref_idx <- cumsum(ref)
-   while (any(cond <- ref_idx %in% arg$fix2zero)) {
+   sizes <- tabulate(arg$id)
+   ref <- sizes
+   ref_idx <- cumsum(sizes)
+   while (any(cond <- ref_idx %in% fix2zero)) {
       ref[cond] <- ref[cond] - 1
       ref_idx[cond] <- ref_idx[cond] - 1
    }
    arg$ref <- ref
    arg$ref_idx <- ref_idx
+   logit <- par - par[ref_idx[arg$id]]
+
+   # Transform the stored Hessian to the reordered reference logits.
+   hess <- x$hessian
+   old_free <- which(!is.na(diag(hess)))
+   if (length(old_free)) {
+      new_free <- setdiff(which(is.finite(logit)), ref_idx)
+      transform <- matrix(0, length(old_free), length(new_free))
+      pos <- match(old_free, rid)
+      base <- match(x$arg$ref_idx[x$arg$id[old_free]], rid)
+      for (i in seq_along(old_free)) {
+         transform[i, ] <- as.numeric(new_free == pos[i]) -
+            as.numeric(new_free == base[i])
+      }
+      hess[] <- NA_real_
+      hess[new_free, new_free] <- crossprod(
+         transform, x$hessian[old_free, old_free, drop = FALSE] %*% transform
+      )
+   }
 
    etc <- calcModel(
       attr(x$mf, "y"), arg$nobs, arg$nvar, unlist(arg$nlev),
@@ -578,6 +652,7 @@ reorder.slcafit <- function(x, ...) {
    x$logit <- logit
    x$fix2zero <- fix2zero
    x$score <- score
+   x$hessian <- hess
    x$posterior <- list(
       marginal = lapply(post, t), joint = joint
    )
