@@ -80,7 +80,7 @@ restore_missing_pattern <- function(data, template) {
 #' \method{gof}{slcafit}(
 #'    object, ..., test = c("none", "chisq", "boot"),
 #'    nboot = 100, plot = FALSE,
-#'    maxiter = 100, tol = 1e-6, verbose = FALSE
+#'    maxiter = 5000, tol = 1e-6, verbose = FALSE
 #' )
 #'
 #' @param object an object of class `slcafit`, or a list of `slcafit` objects.
@@ -90,7 +90,7 @@ restore_missing_pattern <- function(data, template) {
 #' @param test a character string specifying the type of test to be conducted. If `"chisq"`, a chi-squared test is conducted. If `"boot"`, a bootstrap test is conducted.
 #' @param nboot a positive number specifying the number of bootstrap rounds to be performed. Non-integer values are rounded up.
 #' @param plot a logical value indicating whether to print histogram of G-squared statistics for boostrap samples, only for `test = "boot"`. The default is `FALSE`.
-#' @param maxiter an integer specifying the maximum number of iterations allowed for the estimation process during each bootstrap iteration. The default is 100.
+#' @param maxiter an integer specifying the maximum number of iterations allowed for the estimation process during each bootstrap iteration. The default is 5000.
 #' @param tol a numeric value specifying the convergence tolerance for each bootstrap iteration. The default is `1e-6`.
 #' @param verbose a logical value indicating whether to print progress updates on the number of bootstrapping rounds completed.
 #'
@@ -157,7 +157,7 @@ gof_model_name <- function(expr, object, i) {
 gof.slcafit <- function(
       object, ...,  test = c("none", "chisq", "boot"),
       nboot = 100, plot = FALSE,
-      maxiter = 100, tol = 1e-6, verbose = FALSE
+      maxiter = 5000, tol = 1e-6, verbose = FALSE
 ) {
    cl <- match.call(expand.dots = FALSE)
    objects <- list(object, ...)
@@ -307,6 +307,8 @@ gof.slcafit <- function(
 #' as failures. Hybrid refits must converge in their final `nlm` stage.
 #' With \eqn{B} successful replicates and \eqn{b} statistics at least as large
 #' as observed, the p-value is \eqn{(b + 1)/(B + 1)}.
+#' When the observed likelihood ratio is effectively zero, the p-value is one;
+#' no bootstrap samples or histogram are generated.
 #'
 #' @seealso \link[slca]{gof}
 #'
@@ -334,6 +336,12 @@ compare <- function(
    mf2 <- model2$mf
    attr(mf1, "y") <- NULL
    attr(mf2, "y") <- NULL
+   attr(mf1, "yu") <- NULL
+   attr(mf2, "yu") <- NULL
+   attr(mf1, "saturated.converged") <- NULL
+   attr(mf2, "saturated.converged") <- NULL
+   attr(mf1, "saturated.iterations") <- NULL
+   attr(mf2, "saturated.iterations") <- NULL
    if (!isTRUE(all.equal(mf1, mf2)))
       stop("datasets used for models are different")
 
@@ -439,7 +447,7 @@ compare <- function(
          warning(length(fail_msg), " bootstrap replicate(s) failed.",
                  call. = FALSE)
       dt <- add_boot_attrs(dt, length(fail_msg), list(compare = fail_msg))
-      if (plot && any(ok)) {
+      if (plot && gsq >= 1e-8 && any(ok)) {
          graphics::hist(gb[ok], breaks = "FD",
               main = "Bootstrap Histogram",
               xlab = bquote("G"^2 ~ "statistic"),

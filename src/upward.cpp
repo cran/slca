@@ -7,11 +7,15 @@ void upInit(
       int nk, int nobs, int nvar, int* ncat
 ) {
    for (int i = 0; i < nobs; i ++) {
+      for (int m = 0; m < nvar; m ++) {
+         if (y[m] < 0 || y[m] > ncat[m])
+            stop("response code out of range: expected 0 for missing or 1,...,ncat");
+      }
       double *rho = (double *) ptr_rho;
       for (int k = 0; k < nk; k ++) {
          for (int m = 0; m < nvar; m ++) {
-            if (y[m] >= 0)
-               lambda[k] += rho[y[m]];
+            if (y[m] > 0)
+               lambda[k] += rho[y[m] - 1];
             rho += ncat[m];
          }
       }

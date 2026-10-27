@@ -1,7 +1,7 @@
 Package: slca
 Type: Package
 Title: Structural Modeling for Multiple Latent Class Variables
-Version: 1.4.1
+Version: 1.4.2
 Authors@R: 
    c(person(given = "Youngsun", family = "Kim",
             email = "yskstat@gmail.com",
@@ -32,6 +32,6 @@ Author: Youngsun Kim [aut, cre] (ORCID:
     <https://orcid.org/0000-0001-8003-1939>),
   Hwan Chung [aut] (ORCID: <https://orcid.org/0000-0002-8969-9086>)
 Config/roxygen2/version: 8.1.0
-Packaged: 2026-10-23 03:10:08 UTC; kim0sun
+Packaged: 2026-10-26 14:39:47 UTC; root
 Repository: CRAN
-Date/Publication: 2026-10-23 06:50:02 UTC
+Date/Publication: 2026-10-27 12:30:02 UTC
